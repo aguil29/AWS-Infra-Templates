@@ -1,0 +1,401 @@
+Summary
+
+Section I. AWS Console Login
+Section II. Create Subnets in VPC
+Section III. Create Security Groups
+Section IV. Create EC2s
+Section V. Create EC2 Launch Templates
+Section VI. Create Target Groups
+Section VII. Create Application Load Balancer
+Section VIII. Create Auto Scaling Groups
+Section IX. Select Domain in Route 53
+Section X. Create WAF for App Domain
+Section XI. Test Display of App Domain with WAF
+Section XII. Teardown
+
+
+
+Section I. AWS Console Login
+
+1. Sign-in to the AWS Consule with username, password, and MFA.
+
+2. In AWS Console, type "VPC".
+
+3. Select VPC.
+
+4. In VPC, select "Create VPC".
+
+
+Section II. Create Subnets in VPC
+
+1. In VPC settings, select "VPC and more" in "Resources to create"
+
+2. In name tag auto-generation, enter name for the application's VPC, e.g., "443App_project".
+
+3. In IPv4 CIDR block, enter the starting IP and size of VPC using CIDR block size /16. 
+
+4. In IPv6 CIDR block, leave at default setting "No IPv6 CIDR block".
+
+5. Tenancy is kept at default settings.
+
+6. In Number of Availability Zones (AZs), select 3 AZs. Customize AZs are kept at default settings.
+
+7. Number of public subnets is set to 3.
+
+8. Number of private subnets is set to 6.
+
+9. In Customize subnets CIDR blocks, enter Public subnet with /24 CIDR block size in logical, structured order for each AZ, e.g., "10.6.1.0/24 for us-east-1a, 10.6.2.0/24 for us-east-1b, and 10.6.3.0/24 for us-east-1c".
+
+10. In Customize subnets CIDR blocks, enter Private subnets with /24 CIDR block size in logical order for each AZ, e.g., "10.6.11.0/24, 10.6.12.0/24, 10.6.13.0/24, 10.6.21.0/24, 10.6.22.0/24, and 10.6.23.0/24".
+
+11. In NAT gateways, select "1 per AZ".
+
+12. In VPC endpoints, keep at default setting.
+
+13. DNS options are kept at default settings.
+
+14. In Additional tags, select "Add new tag" and enter unique tagging identification for the VPC. The VPC Name tag has been set and cannot be used here.
+
+15. Review paramaters of VPC, then select "Create VPC". Note, the VPC may take a few minutes to launch.
+
+16. Select "View VPC" to reveiw VPC details.
+
+17. In Virtual private cloud, select "Subnets."
+
+18. In Subnets, rename the first private subnets of each AZ to identify the secure, port 443, private subnets of the app. Enter name of subnets in logical order,  e.g., enter "443App-private-1a for us-east-1a, 443App-private-1b for us-east-1b, and 443App-private-1c for us-east-1c".
+
+19. In Subnets, rename the second private subnets of each AZ to identify the unsecure, port 80, private subnets of the app. Enter name of subnets in logical order, e.g., enter "80App-private-1a for us-east-1a, 80App-private-1b for us-east-1b, and 80App-private-1c for us-east-1c".
+
+
+Section III. Create Security Groups
+
+1. In VPC, in the Security tab, select "Security Groups".
+
+2. In Security Groups, select "Create security group".
+
+3. In Basic details, enter a name to identify security group for the secured, port 443, EC2 instance in "Security group name".
+
+4. Enter brief description in "Description".
+
+5. In VPC, select the VPC for the app.
+
+6. In Inbound rules, select "Add rule." Select "HTTP" as type, "Anywhere-IPv4" as source type, and enter description to identify the secured homepage of the app.
+
+7. In Outbound rules, keep at default settings to allow all outbound traffic.
+
+8. In Tags, select "Add new tag". Enter unique tag name and description to identify security group.
+
+9. Review settings for the security group, then select "Create security group". 
+
+10. Repeat steps 2 through 9 to create a security group for  the unsecured, port 80, EC2 instance. Enter inbound description to identify the unsecured homepage of the app.
+
+11. Repeat steps 2 through 9 to create a security group for the load balancer of the application. For Inbound rules, add rules for ports 80 (HTTP - unsecured homepage)  and 443 (HTTPS - secured homepage) with a description of each.
+
+
+Section IV. Create EC2s
+
+1. In AWS console, type "EC2". Select EC2.
+
+2. In EC2, at the "Instances" tab, select "Instances."
+
+3. In Instances, select "Launch instances".
+
+4. In Name and tags, enter name for the secured EC2 instance, e.g., "443App-EC201" in "Name".
+
+5. In Application and OS Images (Amazon Machine Image), leave at default settings.
+
+6. In Instance type, leave at default setting.
+
+7. In Key pair (login), select "Proceed without a key pair".
+
+8. In Network settings, select the app's VPC in "VPC - required".
+
+9. In Network settings, select a secure-443 private subnet AZ in "Subnet".
+
+10. In Auto-assign public IP, keep at default setting.
+
+11. In Firewall (security groups), select "Select existing security group". Select security group for the secured (port 443) EC2 instance.
+
+12. In Advanced details, add the following bash script in "User data". This is will display on the homepage. 
+
+#!/bin/bash
+# Use this for your user data (script from top to bottom)
+# install httpd (Linux 2 version)
+yum update -y
+yum install -y httpd
+systemctl start httpd
+systemctl enable httpd
+
+# Get the IMDSv2 token
+TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+
+# Background the curl requests
+curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/local-ipv4 &> /tmp/local_ipv4 &
+curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/availability-zone &> /tmp/az &
+curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/ &> /tmp/macid &
+wait
+
+macid=$(cat /tmp/macid)
+local_ipv4=$(cat /tmp/local_ipv4)
+az=$(cat /tmp/az)
+vpc=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/network/interfaces/macs/${macid}/vpc-id)
+
+echo "
+<!doctype html>
+<html lang=\"en\" class=\"h-100\">
+<head>
+<title>Details for EC2 instance</title>
+</head>
+<body>
+<div>
+<h1>AWS Instance Details</h1>
+<h1>Samurai Katana</h1>
+
+<br>
+# insert an image or GIF
+<img src="https://www.w3schools.com/images/w3schools_green.jpg" alt="W3Schools.com">
+<br>
+
+<p><b>Instance Name:</b> $(hostname -f) </p>
+<p><b>Instance Private Ip Address: </b> ${local_ipv4}</p>
+<p><b>Availability Zone: </b> ${az}</p>
+<p><b>Virtual Private Cloud (VPC):</b> ${vpc}</p>
+</div>
+</body>
+</html>
+" > /var/www/html/index.html
+
+# Clean up the temp files
+rm -f /tmp/local_ipv4 /tmp/az /tmp/macid
+
+13. Review EC2 settings and Summary, then select "Launch instance".
+
+14. Repeat steps 3 through 13 for the unsecured EC2 instance e.g., "80App-EC201". Select an unsecure-80 private subnet AZ in "Subnet".
+
+
+Section V. Create EC2 Launch Templates
+
+1. In Instances, select the secured-443 EC2 instance.
+
+2. In the "Actions" tab, under "Images and templates", select "Create template from instance".
+
+3. In Launch template name and descipriton, enter a template name for the secured-443 EC2 instance in "Launch template name". Type "version 1" in "Template version description".
+
+4. In Template tags, select "Add new tag", and enter unique tags to identify instance template.
+
+5. Settings for Application and OS Images (Amazon Machine Image), Instance type, and Key pair (login) are left alone and kept at default.
+
+6. In Network settings, select "Don't include in launch template" for "Subnet".
+
+7. Settings for Firewall (security groups), Storage Volumes, Resource Tags, and Advanced details are left alone and kept at default.
+
+8. Review settings and Summary, then select "Create launch template". To view created template, select "View Launch Template".
+
+9. Repeat steps 1 through 8 for the unsecured-80 EC2 instance.
+
+
+Section VI. Create Target Groups
+
+1. In Instances, at the Load Balancing tab, select "Target Groups".
+
+2. In Target groups, select "Create target group".
+
+3. In Choose a target type, select "Instances".
+
+4. Enter name for the secured-443 app target group in "Target group name".
+
+5. Settings for Protocol, Port, and IP address type are kept at default.
+
+6. In VPC, select the VPC associated with the app. Protocol version is kept at default setting.
+
+7. Health checks are kept at default settings.
+
+8. In Tags, select "Add new tag," and enter unique tags to identify secured-443 target group.
+
+9. Review settings, then select "Next".
+
+10. In Register targets, do not select EC2 instances.
+
+11. Select "Create target group".
+
+12. Repeat Steps 2 through 11 for the unsecured-80 app target group.
+
+
+Section VII. Create Application Load Balancer
+
+1. In Instances, at the Load Balancing tab, select "Load Balancers."
+
+2. In Load balancers, select "Create load balancer".
+
+3. In Load balancer types, select "Create" for  "Application Load Balancer".
+
+4. Enter name for the unified app load balancer in "Load balancer name", e.g., "UnifiedApp-LB01".
+
+5. Select "Internet-facing" for "Scheme".
+
+6. Select "IPv4" for "IP address type".
+
+7. In Network mapping, select the VPC app.
+
+8. In Mappings, select the public subnets for each AZ.
+
+9. In Security groups, select the secured load balancer security group.
+
+10. In Listeners and routing, select HTTP for "Protocol" and 80 for "Port". Select the unsecured-80 target group for "Default action."
+
+11. In listener tags, select "Add listener tag" to tag unique identifiers.
+
+12. Select "Add listener". Repeat Steps 10 and 11 to listen to HTTPS, port 443 with default action to the secured-443 target group.
+
+13. In Secure listener settings, select "ELBSecurityPolicy-TLS13-1-2-2021-06 (recommended)" for "Security policy".
+
+14. Select "From ACM" and a certificate from available domains in "Default SSL/TLS certificate". If no certificate is available, select "Request new ACM certificate".
+
+15. Do not select "AWS Global Accelerator" for "Add-on services".
+
+16. In Load balancer tags, enter unique tags to identify unified, secured target group.
+
+17. Review settings in "Summary", then select "Create load balancer".
+
+
+Section VIII. Create Auto Scaling Groups
+
+1. In Instances, at the Auto Scaling tab, select "Auto Scaling Groups" then select "Create Auto Scaling group".
+
+2. Enter name for the secured-443 app ASG in "Auto Scaling group name".
+
+3. In Launch template, select the secured-443 app EC2 launch template.
+
+4. Review settings, then select "Next".
+
+5. Instance type requirements are kept at default settings.
+
+6. In Network, select the VPC associated with the app.
+
+7. Select the secured-443 private subnets for each AZ in "Availability Zones and subnets". Review settings, then click "Next".
+
+8. In Configure advanced options, under Load balancing, select "Attach to an existing load balancer".
+
+9. In "Attach to an existing load balancer", select "Choose from your load balancer target groups".
+
+10. Select the secured-443 app target group in "Existing load balancer target groups".
+
+11. Select "No VPC Lattice service" in  "VPC Lattice integration options".
+
+12. Select "Turn on Elastic Load Balancing health checks" in "Addtional health check types - optional".
+
+13. Set Health check grace period to 30 seconds.
+
+14. In Additional settings, select "Enable group metrics collection within CloudWatch" in "Monitoring".
+
+15. Select "Enable default instance warmup" and set for 60 seconds. Review settings then select "Next".
+
+16. In Group size, set the following parameters: "Desired capacity" set to 6, "Minimum capacity" set to 3, and "Maximum capicity" set to 15.
+
+17. In Scaling policies, select "Target tracking scaling policy".
+
+18. Enter name to identify the Scaling policy for the secured-443 ASG in "Scaling policy name".
+
+19. In Metric type, select "Average CPU utilization".
+
+20. Enter Target value metric for 50
+
+21. Enter Instance warmup metric for 60 seconds.
+
+22. Select "Enable instance scale-in protection," review settings, and select "Next".
+
+23. In "Add notifications", do not select "Add notification".
+
+24. In "Add tags", select "Add tag" to enter unique tags to identify the secured-443 ASG. Review tags, then select "Next".
+
+25. Review settings for all the steps in creating the secured-443 app ASG, then select "Create Auto Scaling group".
+
+26. Repeat Steps 2 through 25 to create the unsecured-80 app Auto Scaling group. Select the unsecured-80 app EC2 launch template, and the unsecured-80 app private subnets for each AZ.
+
+
+Section IX. Configure Domain in Route 53
+
+1. In Amazon console, type "Route 53" then select Route 53.
+
+2. In Route 53, under "Hosted zones", select the Hosted zone name of the domain used for app, e.g., "komissarkeisha.com".
+
+3. In Hosted zone, under "Records", select "Create record".
+
+4. Select "Simple routing" in "Routing policy" then select "Next".
+
+5. In "Configure records", select "Define simple record".
+
+6. In "Define simple record", under "Record name", leave subdomain blank.
+
+7. In "Record type", select Record type "A - Routes traffic to an IPv4 address and some AWS resources".
+
+8. In "Value/Route traffic to", select "Alias to Application and Classic Load Balancer". 
+
+9. Select Region location of the load balancer for the app, e.g., "US East (N. Virginia)".
+
+10. Select the unified secured load balancer for the app in "Choose load balancer", e.g. "UnifiedApp-LB01".
+
+11. Select "Yes" to evaluate target health.
+
+12. Review simple record settings then select "Define simple record".
+
+13. Review simple routing records to add to domain, then select "Create records".
+
+14. Select "View status" to check the propagation status for the domain Record. If status checks "INSYNC", proceed to the next Step.
+
+
+Section X. Create WAF for App Domain
+
+1. In AWS Console, type "WAF", then select "WAF & Shield".
+
+2. In "WAF & Shield", under "Getting started", select "Create web ACL".
+
+3. In Web ACL details, enter the name of WAF for the domain in "Name", e.g., "WAF_komissarkeisha". Copy and paste Name for Description.
+
+4. In Resource type, select "Regional resources".
+
+5. For Region, select the Region associated with the domain.
+
+6. In "Associated AWS resources", select "Add AWS resources".
+
+7. In "Add AWS resources", select "Application Load Balancer" and the ALB associated with the unified secured app. Review settings, then select "Add".
+
+8. Review Web ACL and resource settings, then select "Next".
+
+9. In "Add rules and rule groups", under the "Add rules" tab, select "Add managed rule groups".
+
+10. In "AWS managed rule groups", under the "Free rule groups" tab, select "Core rule set" and "Known bad inputs" to "Add to web ACL".
+
+11. Do not touch the remaining rule group settings, then select "Add rules".
+
+12. In "Add rules and rule groups", select "Block" for "Default web ACL action for request that don't match any rules". Review settins, then select "Next".
+
+13. Review rules in "Set rule priority", then select "Next".
+
+14. In "Configure metrics", under "Amazon CloudWatch metrics" do not touch settings.
+
+15. In "Request sampling options" select "Enable sampled requests". Review settings, then select "Next".
+
+16. In "Review and create web ACL", review all settings, then select "Create web ACL." If you see a checkmark with "Success", then proceed to the next Step.
+
+
+Section XI. Test Display of App Domain wtih WAF
+
+1. In a separate tab or window, enter the domain name in browser, e.g., "https://<domain_name>". The secured-443 app homepage should appear.
+
+2. Repeat Step 1 for the unsecured-80 app homepage, e.g., "http://<domain_name>.". The unsecured-80 app homepage should appear.
+
+
+Section XII. Teardown
+
+1. Follow the logical order below to sucessfully teardown the secured app domain:
+
+(1) WAF
+(2) Route 53 - Hosted Zones - Domain Name - Records (Record A)
+(3) Application Load Balancer (ALB)
+(4) Target Groups (TGs) for 443App-Secure and 80App-Unsecure
+(5) Auto Scaling Groups (ASGs) for 443App-Secure and 80App-Unsecure
+(6) VPC - NAT Gateways
+(7) VPC - Elastic IPs
+(8) EC2 Instances and Launch Template EC2s
+(9) VPC
