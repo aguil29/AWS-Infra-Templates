@@ -1,0 +1,83 @@
+How to make EC2 Template(s) for Load Balancers
+ 
+1. Select Country of Availability Zone(s) (A.Z.) 
+2. Make a list of subnets that are logical to you for VPC 
+3. From EC2 -> Instances, Launch an Instance 
+4. Name Instance (For example, naming convention should be"<Country of  A.Z.>EC2A") 
+5. Check AMI is set to "Amazon Linux 2023 AMI 64-bit(x86)" 6. Check Instance type is set to "t2.micro" 
+7. Select "Proceeed without a key pair" for Key pair name 6. From Network Settings, select Edit. 
+7. Select your created VPC for A.Z. for VPC 
+8. Select a Private Subnet assigned to A.Z. for Subnet 9. Select "Enable" for Auto-assign public IP 
+10. Select Existing Security Group for Firewall (security groups)  settings 
+10a. Select the Security Group you created for VPC 
+11. From Advanced Details tab, Go to "User data - optional" section 
+11a. Copy and paste the following bash script into "User data optional" section for load balancer instances: 
+
+#!/bin/bash 
+yum update -y 
+yum install -y httpd 
+systemctl start httpd 
+systemctl enable httpd 
+TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X aws-ec2-metadata-token-ttl-seconds: 21600"` 
+curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/ latest/meta-data/ 
+EC2_AVAIL_ZONE=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http:// 169.254.169.254/latest/meta-data/placement/availability-zone) echo "<h1>Hello World from $(hostname -f) in AZ $EC2_AVAIL_ZONE </h1>"  > /var/www/html/index.html 
+
+12. Add Tag of Name, Owner, and Location to identify EC2 Instance. 13. Review all entries to ensure parameters are correct. 14. Select "Launch instance." Allow Instance State to load into Active  mode.  
+15. Highlight your newly created instance instance 
+16. From Actions menu, go to "Images and Templates," and select  "Create launch template from Instance" 
+17. Review name instance. Type "For LB" in Template version  description. 
+17a. From template tags, add tag with "Template MyTemplate" 
+17b. Leave Amazon Machine Image (AMI), Instance type, and Key pair  settings untouched. 
+17c. From Network settings, in Subnet, select "Don't include in launch  template."
+17d. Leave Firewall (security groups) settings untouched. 
+17e. Review settings then select "Create launch template." 
+18. The parameters from your original instance are now included here  as your template.  
+(Key pair, subnet, and firewell settings might need to be changed.)  
+19. From Instnaces, Launch Instance, select "Launch instance from  template." 
+19a. Select Source template you created. 
+19b. Souce template version is for load balancer 
+19c. Leave AMI and Instance type untouched. 
+19d. From Key pair (login), select "Proceed with a key pair" for Key  pair name. 
+19e. From Network settings, Select private subnet from availability  zone B. 
+19f. Firewall (security groups) is left untouched. 
+19g. Advanced details is left untouched. 
+20. Review instance paramaters. Select "Launch Instance." 
+21. Repeat 19 tru 20 for 3rd availability zone. 
+______________________________________________________________________ __________________________________ 
+Setting Up Target Group(s) 
+1.Under EC2 category 
+2.Go To Target Group 
+3.Create Target Group  
+4.Select Target type Instances 
+5.Target group name enter a name easily found and remembered 
+6.VPC select the correct VPC that you named in the from before  
+7.Dont change the protocol version HTTP1 
+8. Create a Tag from for the Target group 
+______________________________________________________________________ __________________________________ 
+Setting Up Load Balancer(s)  
+1. Under EC2 Category 
+2. Lefthand column scroll down to Load Balancing - Select Load  Balancers  
+3. In the top right select "Create load balancer" (Highlighted Orange) 
+4. "Load balancer types" - Select "Application Load Balancer" by  clicking on "create" at the bottom. 
+- Basic configuration 
+5. "Load balancer name" give your load balancer a name. 
+6. Make sure 'Internet-facing" is selected. (Listed under "Scheme") 
+7. Make sure "IPv4" is selected. (Listed under "IP address type") 
+- Network Mapping 
+8. VPC - Deselect the default VPC then select your created vpc from  the drop menu.
+- Security Groups 
+9. Click the drop down arrow - Select your created security group  (specifically created for the LB. Not the other..) 
+-Listerners and Routing 
+10. Protocol - HTTP  
+ Port - 80 
+11. Default action - Select created target group by clicking the drop  down arrow. 
+12. Click "Create load balancer" (Highlighted orange) at the bottom 
+______________________________________________________________________ __________________________________ 
+Teardown Order 
+1.Load Balances 
+2.EC2 Instances 
+3.VPC NAT Gateways 
+4.EC2 Network Interfaces 
+5.Target Groups 
+6.Elastic IPs 
+7.VPC

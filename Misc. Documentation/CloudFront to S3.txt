@@ -1,0 +1,88 @@
+How to Make CloudFront Distribution to S3 Documentation 
+
+Summary: 
+Section 1. Make S3 Bucket 
+Section 2. Upload files to S3 Bucket 
+Section 3. Create and Configure Distribution in CloudFront 
+Section 4. Update S3 CloudFront Policy 
+Section 5. Route Domain Host to Cloud Distribution with Route 53 
+Teardown 
+
+
+Section 1. Make S3 Bucket 
+
+1. Search - S3 - Buckets - Create a bucket 
+2. General configuration 
+2a. Create a name for Bucket (For example, <mys3cloudfront#####>.) 2b. Select AWS Region (For example, select the region "US East (N. Virginia)-us-east-1.") 3. In Object Ownership, leave the default setting at "ACLs disabled." 4. Leave default settings untouched for "Block Public Access settings." 5. Bucket Versioning is Disabled. 
+6. Tags, None. 
+7. Leave default settings untouched for Default encryption at "Amazon S3 Managed Keys (ssE-sa3)." 
+8. Select "Create Bucket." 
+
+
+Section 2. Upload files to S3 Bucket 
+
+1. Select newly created S3 Bucket, the - Select Upload 
+2. Select "Add Files" to upload files.
+3. Select files from the parent folder "code_v2022-12-16\s3". The files in the s3 subfolder include beach.jpg, coffee.jpg, and index.html. 
+4. Select all files and upload. 
+5. Refresh page to confirm files are successfully added to Bucket. 
+
+
+Section 3. Create and Configure Distribution in CloudFront 
+
+1. In AWS, search for cloudfrount. Open CloudFront in a new tab. 
+2. Create cloud front distribution 
+3. Select "Create distribution." 
+4. Search for newly created bucket in the Origin Domain drop down 
+5. Origin Path - leave default 
+6. Origin access - select origin access control settings 
+7. Origin access control - select bucket - create control setting - signing behavior - Sign Request (recommended) 
+8. Origin type - Select S3 
+9. Select "Create." 
+10. In Web Application Firewall (WAF), Select "Do not enable security protection." 11. Settings - Select Use only North America and Europe 
+12. Alternate Domain - Add item - Add created domain 
+13. Custom SSL Certificate - Select domain Cert 
+14. Security Policy leave at default 
+15. Supported HTTP Version - HTTP/2 (default) 
+16. Default Root Object - index.html (script from bucket)
+17. Standard logging - off (default) 
+18. IPv6 - On (Default) 
+19. Description - Create a description ie. "CloudFront Distribution For Demonstration". 
+20. Select - "Create Distribution." A message will appear at the top of the page to update the S3 CloudFront policy. 
+
+
+Section 4. Update S3 CloudFront Policy 
+
+1. Select Cloud distributions - Origins (Tab) 
+2. Highlight Origin Name and select edit. 
+3. Edit Origin. 
+4. Scroll to Bucket Policy - Select Copy Policy. Select the link "Go to S3 Bucket". 5. In S3 Bucket, Select Permissions - Bucket Policy - Edit. 
+6. Paste the new bucket policy. 
+7. Select "Save changes." 
+Section 5. Route Domain Host to Cloud Distribution with Route 53 
+1. In Route 53, select "Hosted Zones." 
+2. Select your domain used in Distribution. 
+3. Select "Create Record". 
+4. Select "Simple routing," then select "Next." 
+5. Select "Define simple record." 
+6. Select "Route A" for Record Type. 
+7. Select "Alias to CloudFront Distribution" for Value/Route traffic. 
+8. Choose Distribution - Select your personally created distribution.
+(Creating distributions may take some time) To check the process - open a new tab - go to distributions to check progress. (Process needs to be complete before proceeding forward) 
+9. Select "Define simple record." 
+10. Review simple record, then select "Create record." 
+11. Copy and paste domain into a new tab to view unsecure version (Port 80) of web page. (For example, "http://<web domain name>") 
+12. Copy and paste domain into a new tab to view secure version (Port 443) of web page. (For example, "https://<web domain name>") 
+
+
+******TEAR DOWN************* 
+
+1. Deleting Records 
+Route 53 
+Records - Hosted Zones - Select The first record (Record A) - Delete record Confirmation pops up 
+2. Disabling Distribution 
+Cloudfront - Distributions- Select distribution - disable 
+3. Deleting files in Bucket 
+S3 - Buckets - Select Created bucket - Select all files - Delete Confirmation pops up 
+4. Final Deleting the Bucket itself 
+Buckets - Select created bucket - delete
